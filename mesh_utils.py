@@ -13,11 +13,30 @@ G  = (Gx, Gy)
 O  = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141 # Order, n in literature
 
 
-# Function to hash things
+# Function to hash things. Either feed in byte strings or regular strings
 def sha256(hash_string) :
-    sig = hashlib.sha256(hash_string.encode()).hexdigest()
+    if isinstance(hash_string, bytes) : # Already bytes
+        hashed = hashlib.sha256(hash_string).hexdigest()
+    elif isinstance(hash_string, int) : # Integer
+        hashed = hashlib.sha256(hash_string.to_bytes(32, byteorder='big')).hexdigest()
+    else : # String
+        hashed = hashlib.sha256(hash_string.encode()).hexdigest()
 
-    return int(sig, 16)
+    return int(hashed, 16)
+
+def ripemd160(hash_string) :
+    h = hashlib.new('ripemd160')
+
+    if isinstance(hash_string, bytes) : # Already bytes
+        h.update(hash_string)
+    elif isinstance(hash_string, int) :
+        h.update(hash_string.to_bytes(32, byteorder='big'))
+    else :
+        h.update(hash_string.encode())
+
+    hashed = h.hexdigest()
+
+    return int(hashed, 16)
 
 
 # Function to draw a random int in range (0, 2^256]
