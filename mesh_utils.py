@@ -17,10 +17,20 @@ O  = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141 # Order,
 def sha256(hash_string) :
     if isinstance(hash_string, bytes) : # Already bytes
         hashed = hashlib.sha256(hash_string).hexdigest()
-    elif isinstance(hash_string, int) : # Integer
+    elif isinstance(hash_string, int) : # Integer, default to 256b
         hashed = hashlib.sha256(hash_string.to_bytes(32, byteorder='big')).hexdigest()
     else : # String
-        hashed = hashlib.sha256(hash_string.encode()).hexdigest()
+        l = len(hash_string)
+        if (l % 2 == 1) : # Append a zero to make even
+            hash_string = '0' + hash_string
+            l += 1
+
+        # Format into a bytestring
+        hash_int = int(hash_string, 16)
+
+        # Cast to bytes
+        hash_b = hash_int.to_bytes(l >> 1, byteorder='big')
+        hashed = hashlib.sha256(hash_b).hexdigest()
 
     return int(hashed, 16)
 
@@ -32,7 +42,18 @@ def ripemd160(hash_string) :
     elif isinstance(hash_string, int) :
         h.update(hash_string.to_bytes(32, byteorder='big'))
     else :
-        h.update(hash_string.encode())
+        l = len(hash_string)
+        if (l % 2 == 1) : # Append a zero to make even
+            hash_string = '0' + hash_string
+            l += 1
+
+        # Format into a bytestring
+        hash_int = int(hash_string, 16)
+
+        # Cast to bytes
+        hash_b = hash_int.to_bytes(l >> 1, byteorder='big')
+
+        h.update(hash_b)
 
     hashed = h.hexdigest()
 
@@ -142,6 +163,71 @@ def scal_mult_n(P, k) :
         k_int = k_int >> 1 # Cut in half
 
     return P_res # Return the result
+
+
+# Function to generate a public key given the ECDSA private key
+# Returns the 33B format
+def gen_pub(sk) :
+    pk_pt = scal_mult_n(G, sk)
+
+    if (pk_pt[1] % 2 == 0) : # Even, append a 02 to front
+        pk = '02' + format(pk_pt[0], '064x')
+    else : # Odd, append a 03
+        pk = '03' + format(pk_pt[0], '064x')
+
+    return pk
+
+
+# Function to calculate the public address given the public key
+# Accepts either uncompressed or compressed format string
+# Returns the 25B version
+def gen_addr(pk) :
+    if (pk[0:2] == '04') : # Turn uncompressed into compressed
+        pk = pk[2:66]
+
+        if (int(pk[-1], 16) % 2 == 0) : # Even
+            pk = '02' + pk 
+        else :
+            pk = '03' + pk
+
+    # First perform the sha256
+    pk = sha256(pk) # Returns an int
+
+    # Then the RIPEMD160
+    pk = format(ripemd160(pk), '040x') # Cast to a 20B string
+
+    # Add the version byte in front
+    pk = '00' + pk
+
+    # Now need to add the checksum
+    pk2 = format(sha256(sha256(pk)), '064x') # Double SHA256 and cast to string
+
+    # Append checksum
+    addr = pk + pk2[0:8]
+
+    # Done, return
+    return addr
+
+
+# Function to check the address is valid
+def check_addr(addr) :
+    # Check length
+    if len(addr) != 50 :
+        return False
+
+    # Separate the 21B hash
+    pk = addr[0:42]
+
+    # Calculate the checksum
+    pk2 = format(sha256(sha256(pk)), '064x') # Double SHA256 and cast to string
+
+    if addr[42:] == pk2[0:8] :
+        return True
+    else :
+        return False
+
+
+
 
 
 # Function to generate a signature tuple given the message (msg) and private key (sk)
